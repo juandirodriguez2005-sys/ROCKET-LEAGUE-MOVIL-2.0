@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07120d">
+<title>Rocket Drive 3D</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#07120d; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; touch-action:none; }
+  #game { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #hud { position:fixed; top:max(10px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:clamp(10px,3vw,28px); z-index:5; pointer-events:none; padding:7px 18px; border:1px solid #ffffff36; border-radius:16px; background:#07120dd9; box-shadow:0 4px 24px #0006; }
+  .score { font-size:clamp(22px,5vw,36px); font-weight:900; line-height:1; min-width:24px; text-align:center; text-shadow:0 2px 10px currentColor; }
+  #blueScore { color:#55baff; } #redScore { color:#ff6666; }
+  #clock { color:white; font-size:clamp(12px,2.5vw,17px); font-weight:800; letter-spacing:.12em; }
+  #goalFlash { position:fixed; left:50%; top:28%; transform:translate(-50%,-50%) scale(.7); color:white; font-size:clamp(42px,12vw,92px); font-weight:1000; font-style:italic; text-shadow:0 0 20px #ffb42c,0 4px 0 #b74700; opacity:0; z-index:8; pointer-events:none; transition:opacity .15s,transform .15s; }
+  #goalFlash.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  #hint { position:fixed; left:50%; top:calc(max(64px, env(safe-area-inset-top) + 54px)); transform:translateX(-50%); color:#fff9; font-size:11px; white-space:nowrap; z-index:4; pointer-events:none; text-shadow:0 1px 4px #000; }
+  #controls { position:fixed; inset:0; z-index:6; pointer-events:none; }
+  #steerZone { position:absolute; left:0; bottom:0; width:54%; height:62%; pointer-events:auto; touch-action:none; }
+  #stickBase { position:absolute; left:clamp(22px,5vw,55px); bottom:clamp(18px,5vh,48px); width:clamp(105px,20vw,150px); aspect-ratio:1; border:2px solid #ffffff42; border-radius:50%; background:#06150e55; box-shadow:inset 0 0 24px #0004; }
+  #stickBase:before { content:""; position:absolute; inset:25%; border:1px solid #ffffff24; border-radius:50%; }
+  #stickKnob { position:absolute; width:38%; aspect-ratio:1; left:31%; top:31%; border-radius:50%; background:linear-gradient(145deg,#ffffffb8,#9ed5ff80); border:1px solid #ffffffa6; box-shadow:0 4px 14px #0007; }
+  #actions { position:absolute; right:clamp(18px,4vw,45px); bottom:clamp(18px,4vh,40px); display:flex; align-items:flex-end; gap:clamp(12px,3vw,26px); pointer-events:auto; }
+  .actionBtn { width:clamp(72px,14vw,108px); aspect-ratio:1; border-radius:50%; border:2px solid #ffffff99; color:white; font-weight:900; font-size:clamp(11px,2.5vw,15px); letter-spacing:.04em; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; background:#101d24b8; box-shadow:0 4px 20px #0006,inset 0 0 16px #ffffff15; touch-action:none; user-select:none; }
+  .actionBtn span { font-size:clamp(22px,5vw,34px); line-height:1; }
+  #boost { border-color:#ffb02e; background:radial-gradient(circle,#a64b0bd9,#361706db); box-shadow:0 0 20px #ff8b24aa,inset 0 0 18px #ffb02e35; }
+  #boost.active { background:radial-gradient(circle,#ffbe39,#d54c00); box-shadow:0 0 30px #ff8b24; transform:scale(.96); }
+  #jump.active { background:#2d82bddd; }
+  #rotateHint { position:absolute; left:18px; top:18px; color:#fff8; font-size:10px; pointer-events:none; }
+  #landscapeNotice { display:none; position:fixed; inset:0; z-index:20; background:#07120d; color:white; align-items:center; justify-content:center; text-align:center; padding:28px; }
+  #landscapeNotice div { max-width:320px; } #landscapeNotice strong { display:block; font-size:23px; margin-bottom:8px; }
+  @media (orientation:portrait) {
+    #landscapeNotice { display:flex; }
+    #hint { top:80px; }
+  }
+  @media (max-height:380px) {
+    #stickBase { width:100px; }
+    .actionBtn { width:70px; }
+    #actions { gap:10px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud" aria-label="Marcador">
+  <div class="score" id="blueScore">0</div><div id="clock">ROCKET DRIVE</div><div class="score" id="redScore">0</div>
+</div>
+<div id="hint">DESLIZA: acelerar/frenar y girar · Nitro y salto a la derecha</div>
+<div id="goalFlash">¡GOL!</div>
+<div id="controls">
+  <div id="steerZone" aria-label="Control de dirección">
+    <div id="rotateHint">CONTROL TÁCTIL</div>
+    <div id="stickBase"><div id="stickKnob"></div></div>
+  </div>
+  <div id="actions">
+    <button class="actionBtn" id="jump" aria-label="Saltar"><span>⬆</span>SALTAR</button>
+    <button class="actionBtn" id="boost" aria-label="Nitro"><span>🔥</span>NITRO</button>
+  </div>
+</div>
+<div id="landscapeNotice"><div><strong>Gira el móvil ↻</strong>Este juego está diseñado para jugarse en horizontal.</div></div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
+
+const canvas = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:false, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = false;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07130f);
+scene.fog = new THREE.Fog(0x07130f, 32, 90);
+const camera = new THREE.PerspectiveCamera(78, window.innerWidth/window.innerHeight, 0.05, 160);
+camera.position.set(0, 1.15, 0.15);
+
+const hemi = new THREE.HemisphereLight(0xd7efff, 0x18391b, 2.0); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 2.0); sun.position.set(-8,18,7); scene.add(sun);
+
+const world = new CANNON.World({ gravity:new CANNON.Vec3(0,-9.82,0) });
+world.broadphase = new CANNON.SAPBroadphase(world);
+world.allowSleep = true;
+world.defaultContactMaterial.friction = 0.35;
+world.defaultContactMaterial.restitution = 0.22;
+const matGround = new CANNON.Material('ground'), matCar = new CANNON.Material('car'), matBall = new CANNON.Material('ball'), matWall = new CANNON.Material('wall');
+world.addContactMaterial(new CANNON.ContactMaterial(matGround, matCar, { friction:0.85, restitution:0.05 }));
+world.addContactMaterial(new CANNON.ContactMaterial(matGround, matBall, { friction:0.38, restitution:0.62 }));
+world.addContactMaterial(new CANNON.ContactMaterial(matWall, matBall, { friction:0.22, restitution:0.78 }));
+world.addContactMaterial(new CANNON.ContactMaterial(matCar, matBall, { friction:0.4, restitution:0.42 }));
+
+const FIELD_W=44, FIELD_L=28, WALL_H=2.2, GOAL_W=7, GOAL_D=3.8;
+const mats = {
+  grass: new THREE.MeshStandardMaterial({color:0x247b32, roughness:1}),
+  stripe: new THREE.MeshStandardMaterial({color:0x2b8738, roughness:1}),
+  line: new THREE.MeshBasicMaterial({color:0xffffff}),
+  wall: new THREE.MeshStandardMaterial({color:0x172d38, roughness:.8, metalness:.2}),
+  blue: new THREE.MeshStandardMaterial({color:0x168bff, roughness:.45, metalness:.2}),
+  red: new THREE.MeshStandardMaterial({color:0xff443d, roughness:.45, metalness:.2}),
+  car: new THREE.MeshStandardMaterial({color:0x168dff, roughness:.38, metalness:.25}),
+  dark: new THREE.MeshStandardMaterial({color:0x0b1720, roughness:.7}),
+  glass: new THREE.MeshStandardMaterial({color:0x8be1ff, roughness:.2, metalness:.1}),
+  ball: new THREE.MeshStandardMaterial({color:0xf1f2ed, roughness:.55}),
+  black: new THREE.MeshStandardMaterial({color:0x15191c, roughness:.8})
+};
+function boxMesh(w,h,d, material, x,y,z) {
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material); m.position.set(x,y,z); scene.add(m); return m;
+}
+function addStaticBox(w,h,d,x,y,z,material,bodyMaterial=matWall) {
+  const body=new CANNON.Body({mass:0, material:bodyMaterial, shape:new CANNON.Box(new CANNON.Vec3(w/2,h/2,d/2)), position:new CANNON.Vec3(x,y,z)});
+  world.addBody(body); boxMesh(w,h,d,material,x,y,z); return body;
+}
+
+// Field and alternating mowing stripes
+boxMesh(FIELD_W,.15,FIELD_L,mats.grass,0,-.13,0);
+for(let i=0;i<11;i++) boxMesh(FIELD_W/11,.012,FIELD_L,i*FIELD_W/11-FIELD_W/2+FIELD_W/22,-.048,0,i%2?mats.stripe:mats.grass);
+function line(x,z,w,d) { boxMesh(w,.018,d,mats.line,x,.0,z); }
+line(0,0,.09,FIELD_L); line(0,-FIELD_L/2+.12,FIELD_W,.12); line(0,FIELD_L/2-.12,FIELD_W,.12);
+line(-FIELD_W/2+.12,0,.12,FIELD_L); line(FIELD_W/2-.12,0,.12,FIELD_L);
+// center circle, approximated with segments
+for(let i=0;i<64;i++){ const a=i*Math.PI*2/64, b=(i+1)*Math.PI*2/64; const x=(Math.cos(a)+Math.cos(b))*3.2/2,z=(Math.sin(a)+Math.sin(b))*3.2/2; const dx=Math.cos(b)-Math.cos(a), dz=Math.sin(b)-Math.sin(a); const m=boxMesh(Math.hypot(dx,dz),.02,.045,mats.line,x,.012,z); m.rotation.y=-Math.atan2(dz,dx); }
+// stadium rails along long sides and ends, leaving goal mouth openings
+addStaticBox(FIELD_W,.65,.35,0,.3,-FIELD_L/2-.12,mats.wall);
+addStaticBox(FIELD_W,.65,.35,0,.3,FIELD_L/2+.12,mats.wall);
+const endSeg=(FIELD_L-GOAL_W)/2;
+for(const s of [-1,1]) {
+  addStaticBox(.35,WALL_H,endSeg, s*(FIELD_W/2+.05),WALL_H/2, -(GOAL_W+endSeg)/2,mats.wall);
+  addStaticBox(.35,WALL_H,endSeg, s*(FIELD_W/2+.05),WALL_H/2, (GOAL_W+endSeg)/2,mats.wall);
+  // goal back and posts: visible 3D frames
+  const x=s*(FIELD_W/2+GOAL_D/2);
+  boxMesh(.22,.22,GOAL_W,mats[s<0?'blue':'red'],x,2.25,0);
+  boxMesh(.22,2.25,.22,mats[s<0?'blue':'red'],x,1.15,-GOAL_W/2);
+  boxMesh(.22,2.25,.22,mats[s<0?'blue':'red'],x,1.15,GOAL_W/2);
+  boxMesh(GOAL_D,.12,.12,mats[s<0?'blue':'red'],s*(FIELD_W/2+GOAL_D/2),.06,0);
+  // goal net back wall, transparent-looking bars
+  for(let j=0;j<7;j++) boxMesh(.05,1.9,.035,mats.line,x,1,j*(GOAL_W/6)-GOAL_W/2);
+  for(let j=0;j<4;j++) boxMesh(.05,.035,GOAL_W,x,.25+j*.5,0);
+}
+// physics side walls, end walls have a gap for goal mouths
+addStaticBox(FIELD_W,.5,.5,0,-.05,-FIELD_L/2,mats.wall,matGround);
+addStaticBox(FIELD_W,.5,.5,0,-.05,FIELD_L/2,mats.wall,matGround);
+for(const s of [-1,1]) {
+  addStaticBox(.5,WALL_H,endSeg,s*(FIELD_W/2),WALL_H/2,-(GOAL_W+endSeg)/2,mats.wall);
+  addStaticBox(.5,WALL_H,endSeg,s*(FIELD_W/2),WALL_H/2,(GOAL_W+endSeg)/2,mats.wall);
+}
+// Ground physics plane
+const groundBody=new CANNON.Body({mass:0,material:matGround,shape:new CANNON.Plane()});
+groundBody.quaternion.setFromEuler(-Math.PI/2,0,0); groundBody.position.set(0,-.06,0); world.addBody(groundBody);
+
+// Car body: x is across pitch, forward direction is local -Z
+const carBody=new CANNON.Body({mass:145, material:matCar, position:new CANNON.Vec3(-7,.72,0), linearDamping:.28, angularDamping:.88});
+carBody.addShape(new CANNON.Box(new CANNON.Vec3(.72,.34,1.15)),new CANNON.Vec3(0,0,0));
+carBody.fixedRotation=true; carBody.updateMassProperties(); world.addBody(carBody);
+const carGroup=new THREE.Group(); scene.add(carGroup);
+const chassis=new THREE.Mesh(new THREE.BoxGeometry(1.42,.55,2.25),mats.car); chassis.position.y=0; carGroup.add(chassis);
+const hood=new THREE.Mesh(new THREE.BoxGeometry(1.02,.22,.66),mats.blue); hood.position.set(0,.25,-.57); carGroup.add(hood);
+const cabin=new THREE.Mesh(new THREE.BoxGeometry(.92,.38,.88),mats.glass); cabin.position.set(0,.34,.18); carGroup.add(cabin);
+for(const x of [-.76,.76]) for(const z of [-.68,.72]) {
+  const wheel=new THREE.Mesh(new THREE.BoxGeometry(.22,.35,.5),mats.dark); wheel.position.set(x,-.12,z); carGroup.add(wheel);
+}
+for(const x of [-.42,.42]) { const light=new THREE.Mesh(new THREE.BoxGeometry(.24,.09,.06),new THREE.MeshBasicMaterial({color:0xc6f5ff})); light.position.set(x,.05,-1.14); carGroup.add(light); }
+
+// Ball body and mesh
+const BALL_R=.82;
+const ballBody=new CANNON.Body({mass:42, material:matBall, shape:new CANNON.Sphere(BALL_R), position:new CANNON.Vec3(0,BALL_R+.08,0), linearDamping:.11, angularDamping:.12});
+ballBody.allowSleep=false; world.addBody(ballBody);
+const ballMesh=new THREE.Mesh(new THREE.SphereGeometry(BALL_R,20,16),mats.ball); scene.add(ballMesh);
+const patchMat=mats.black;
+for(let i=0;i<8;i++){
+  const a=i*Math.PI/4, patch=new THREE.Mesh(new THREE.CircleGeometry(.22,5),patchMat);
+  patch.position.set(Math.cos(a)*.55, .45, Math.sin(a)*.55); patch.rotation.x=-Math.PI/2; ballMesh.add(patch);
+}
+const ring=new THREE.Mesh(new THREE.TorusGeometry(BALL_R+.05,.035,5,32),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.3})); ring.rotation.x=Math.PI/2; scene.add(ring);
+
+// Decorative light strips
+for(let i=0;i<14;i++){
+  const x=-FIELD_W/2+i*FIELD_W/13;
+  boxMesh(.12,.05,.5,new THREE.MeshBasicMaterial({color:i%2?0x168bff:0xff443d}),x,.75,-FIELD_L/2-.36);
+  boxMesh(.12,.05,.5,new THREE.MeshBasicMaterial({color:i%2?0xff443d:0x168bff}),x,.75,FIELD_L/2+.36);
+}
+
+// Controls: virtual joystick / drag. Vertical = throttle, horizontal = steering.
+const steerZone=document.getElementById('steerZone'), stickBase=document.getElementById('stickBase'), stickKnob=document.getElementById('stickKnob');
+const boostBtn=document.getElementById('boost'), jumpBtn=document.getElementById('jump');
+let pointerId=null, steer=0, throttle=0, boost=false, jumpQueued=false, lastJump=0;
+function setStick(clientX,clientY){
+  const r=stickBase.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+  const max=r.width*.38, dx=clientX-cx, dy=clientY-cy, len=Math.hypot(dx,dy), k=len>max?max/len:1;
+  const x=dx*k, y=dy*k;
+  stickKnob.style.left=`calc(31% + ${x}px)`; stickKnob.style.top=`calc(31% + ${y}px)`;
+  steer=Math.max(-1,Math.min(1,x/max));
+  throttle=Math.max(-1,Math.min(1,-y/max));
+}
+function resetStick(){ pointerId=null; steer=0; throttle=0; stickKnob.style.left='31%'; stickKnob.style.top='31%'; }
+steerZone.addEventListener('pointerdown',e=>{ if(e.target.closest('button'))return; pointerId=e.pointerId; steerZone.setPointerCapture(e.pointerId); setStick(e.clientX,e.clientY); e.preventDefault(); });
+steerZone.addEventListener('pointermove',e=>{if(pointerId===e.pointerId)setStick(e.clientX,e.clientY);});
+steerZone.addEventListener('pointerup',e=>{if(pointerId===e.pointerId)resetStick();});
+steerZone.addEventListener('pointercancel',resetStick);
+boostBtn.addEventListener('pointerdown',e=>{boost=true;boostBtn.classList.add('active');boostBtn.setPointerCapture(e.pointerId);e.preventDefault();});
+function stopBoost(){boost=false;boostBtn.classList.remove('active');}
+boostBtn.addEventListener('pointerup',stopBoost); boostBtn.addEventListener('pointercancel',stopBoost); boostBtn.addEventListener('lostpointercapture',stopBoost);
+jumpBtn.addEventListener('pointerdown',e=>{jumpQueued=true;jumpBtn.classList.add('active');setTimeout(()=>jumpBtn.classList.remove('active'),160);e.preventDefault();});
+window.addEventListener('contextmenu',e=>e.preventDefault());
+window.addEventListener('blur',()=>{stopBoost();resetStick();});
+
+let blueScore=0, redScore=0, goalCooldown=0, elapsed=0;
+const blueScoreEl=document.getElementById('blueScore'), redScoreEl=document.getElementById('redScore'), clockEl=document.getElementById('clock'), goalFlash=document.getElementById('goalFlash');
+function resetRound(){
+  carBody.position.set(-7,.72,0); carBody.velocity.set(0,0,0); carBody.angularVelocity.set(0,0,0);
+  carBody.quaternion.setFromEuler(0,Math.PI/2,0); // face toward center (+X)
+  ballBody.position.set(0,BALL_R+.08,0); ballBody.velocity.set(0,0,0); ballBody.angularVelocity.set(0,0,0);
+  goalCooldown=1.2;
+}
+function scoreGoal(side){
+  if(goalCooldown>0)return;
+  if(side==='left') redScore++; else blueScore++;
+  blueScoreEl.textContent=blueScore; redScoreEl.textContent=redScore;
+  goalFlash.textContent='¡GOL!'; goalFlash.classList.add('show');
+  setTimeout(()=>goalFlash.classList.remove('show'),1100);
+  resetRound();
+}
+resetRound();
+
+// Camera follows car transform but sits just above hood, with subtle look-ahead.
+const forward=new CANNON.Vec3(), right=new CANNON.Vec3(), tmp=new CANNON.Vec3();
+const clock=new THREE.Clock();
+let accumulator=0;
+function updateCar(dt){
+  const q=carBody.quaternion;
+  q.vmult(new CANNON.Vec3(0,0,-1),forward);
+  q.vmult(new CANNON.Vec3(1,0,0),right);
+  const horizontalSpeed=Math.hypot(carBody.velocity.x,carBody.velocity.z);
+  const onGround=carBody.position.y<1.18;
+  // Steering effectiveness increases with speed; yaw follows the car's forward motion.
+  if(onGround && Math.abs(throttle)>.04){
+    const yaw=-steer*(0.55+Math.min(horizontalSpeed/9,1.1))*Math.sign(throttle)*dt;
+    const yawQ=new CANNON.Quaternion(); yawQ.setFromAxisAngle(new CANNON.Vec3(0,1,0),yaw);
+    carBody.quaternion=yawQ.mult(carBody.quaternion);
+    carBody.quaternion.normalize();
+  }
+  const power=boost?3000:1600;
+  if(Math.abs(throttle)>.025){
+    carBody.applyForce(new CANNON.Vec3(forward.x*power*throttle,0,forward.z*power*throttle),carBody.position);
+  }
+  // Lateral tire grip: damp sideways velocity for a planted arcade-car feel.
+  q.copy(carBody.quaternion);
+  q.vmult(new CANNON.Vec3(1,0,0),right);
+  const lateral=carBody.velocity.dot(right);
+  carBody.velocity.x-=right.x*lateral*Math.min(8*dt,1);
+  carBody.velocity.z-=right.z*lateral*Math.min(8*dt,1);
+  const maxSpeed=boost?24:15;
+  const speed=Math.hypot(carBody.velocity.x,carBody.velocity.z);
+  if(speed>maxSpeed){carBody.velocity.x*=maxSpeed/speed;carBody.velocity.z*=maxSpeed/speed;}
+  if(jumpQueued && onGround && performance.now()-lastJump>250){
+    carBody.velocity.y=6.8; lastJump=performance.now();
+  }
+  jumpQueued=false;
+  // Keep the car from tumbling while retaining vertical gravity for jumps.
+  carBody.angularVelocity.set(0,0,0);
+}
+function updateCamera(){
+  carGroup.position.set(carBody.position.x,carBody.position.y,carBody.position.z);
+  carGroup.quaternion.set(carBody.quaternion.x,carBody.quaternion.y,carBody.quaternion.z,carBody.quaternion.w);
+  const q=carBody.quaternion;
+  const camOffset=new CANNON.Vec3(0,1.08,.1);
+  q.vmult(camOffset,tmp);
+  camera.position.set(carBody.position.x+tmp.x,carBody.position.y+tmp.y,carBody.position.z+tmp.z);
+  q.vmult(new CANNON.Vec3(0,.12,-1),forward);
+  camera.lookAt(camera.position.x+forward.x*12,camera.position.y+forward.y*12,camera.position.z+forward.z*12);
+}
+function checkGoals(){
+  if(goalCooldown>0)return;
+  const b=ballBody.position;
+  if(Math.abs(b.z)<GOAL_W/2 && b.x < -FIELD_W/2-.25) scoreGoal('left');
+  else if(Math.abs(b.z)<GOAL_W/2 && b.x > FIELD_W/2+.25) scoreGoal('right');
+}
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),.033);
+  elapsed+=dt; goalCooldown=Math.max(0,goalCooldown-dt);
+  // Fixed physics substeps for stable collisions on mobile.
+  world.step(1/60,dt,3);
+  updateCar(dt);
+  // A second small step after force application makes touch response immediate.
+  world.step(1/60,0,3);
+  ballMesh.position.set(ballBody.position.x,ballBody.position.y,ballBody.position.z);
+  ballMesh.quaternion.set(ballBody.quaternion.x,ballBody.quaternion.y,ballBody.quaternion.z,ballBody.quaternion.w);
+  ring.position.set(ballBody.position.x,.035,ballBody.position.z);
+  ring.rotation.z=elapsed*.3;
+  updateCamera(); checkGoals();
+  clockEl.textContent=`${Math.floor(elapsed/60).toString().padStart(2,'0')}:${Math.floor(elapsed%60).toString().padStart(2,'0')}`;
+  renderer.render(scene,camera);
+}
+function resize(){
+  const w=window.innerWidth,h=window.innerHeight;
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5)); renderer.setSize(w,h);
+}
+window.addEventListener('resize',resize); window.addEventListener('orientationchange',()=>setTimeout(resize,180));
+resize(); animate();
+</script>
+</body>
+</html>
